@@ -1,0 +1,2759 @@
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+// 0 = normal, 1 = to html files
+#define DUMPTYPE 0
+
+void         GetString(FILE*, int, char[]);
+void         LoadCompressedText(FILE*);
+void         AddAddress(int);
+unsigned int HexToSNES(unsigned int);
+unsigned int SNESToHex(unsigned int);
+bool         AddressExists(int);
+void         WriteHTML(char*, int, int);
+void         DumpSigns(FILE*);
+void         DumpActions(FILE*);
+void         DumpEnemyActions(FILE*);
+void         DumpMiscLine(FILE*, int, int);
+void         DumpPhoneStuff(FILE*);
+void         DumpFlyoverLine(FILE*, int);
+void         DumpNamingText(FILE*, int, int);
+int          GetAddress(FILE*, int);
+
+//char* convChar = "\n!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ??G??`abcdefghijklmnopqrstuvwxyz{|}~?"
+char  comprText[768][25];
+int   addressList[18000] = {0};
+int   signList[1000] = {0};
+int   signBase[1000] = {0};
+int   actionList[400] = {0};
+int   actionBase[400] = {0};
+int   enactionList[500] = {0};
+int   eaBase[500] = {0};
+int   phoneList[6] = {0};
+int   alTotal = 0;
+int   curraddrPtr = 0;
+int   signTotal = 0;
+int   actionTotal = 0;
+int   enactionTotal = 0;
+int   phoneTotal = 0;
+
+int main(void)
+{
+	FILE* fin;
+	FILE* fout;
+	char  str[7000] = "";
+	char  tempStr[200] = "";
+	int   i;
+	int   j;
+	int   tempAddr;
+	int   temp;
+	bool  alreadyExists = false;
+	int   type;
+
+        fin = fopen("german.smc", "rb");
+	if (fin == NULL)
+	{
+		printf("Can't open file.\n");
+		return -1;
+	}
+
+	fout = fopen("_temp.txt", "w");
+
+    FILE* fin2 = fopen("intro.txt", "r");
+
+    fgets(str, 7000, fin2);
+    while (!feof(fin2))
+    {
+	    printf(str);
+	    fgets(str, 7000, fin2);
+	}
+    fclose(fin2);
+
+	LoadCompressedText(fin);
+
+    fprintf(fout, "\n\n\n\n\n//===========================================================================================\n");
+    fprintf(fout, "//=        TECHNICAL STUFF BELOW, DO *NOT* TAMPER WITH THIS, IT *WILL* SCREW STUFF UP       =\n");
+    fprintf(fout, "//===========================================================================================\n");
+    fprintf(fout, "\n//MAIN TEXT POINTER REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("//======================MAIN TEXT===========================================");
+    else
+        printf("<CENTER><B>MAIN TEXT</B></CENTER><BR>");
+
+    for (i = 0; i < 1583; i++)
+    {
+		fseek(fin, 0x0F8B96 + (i * 17), SEEK_SET);
+		type = fgetc(fin);
+
+        //PRIMARY ADDRESS
+		fseek(fin, 0x0F8B96 + 9 + (i * 17), SEEK_SET);
+		tempAddr = fgetc(fin);
+		tempAddr += fgetc(fin) << 8;
+		tempAddr += fgetc(fin) << 16;
+		tempAddr += fgetc(fin) << 24;
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0)
+			fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", 0x0F8B96 + 9 + (i * 17), tempAddr);
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+        {
+		   AddAddress(SNESToHex(tempAddr));
+
+           if (DUMPTYPE == 0)
+		       printf("\n//--------------------------------------------------------------------------\n");
+		   else
+		       printf("\n<HR>\n");
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+           if (DUMPTYPE == 0)
+       	      printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+       	   else
+	       	  WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+		      if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+  		      printf("%d \n", curraddrPtr);
+		   }
+
+
+           if (type != 2)
+           {
+              //SECONDARY ADDRESS
+   		      fseek(fin, 0x0F8B96 + 13 + (i * 17), SEEK_SET);
+		      tempAddr = fgetc(fin);
+		      tempAddr += fgetc(fin) << 8;
+		      tempAddr += fgetc(fin) << 16;
+		      tempAddr += fgetc(fin) << 24;
+
+              alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+              strcpy(str, "");
+
+              if (tempAddr != 0)
+		      	  fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", 0x0F8B96 + 13 + (i * 17), tempAddr);
+
+              if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+              {
+		         AddAddress(SNESToHex(tempAddr));
+              	  if (DUMPTYPE == 0)
+		             printf("//-----------------SECONDARY POINTERS/KEY ITEM POINTERS---------------------\n");
+		          else
+		              printf("\n<B>SECONDARY/KEY ITEM LINES</B><BR>\n");
+
+		         GetString(fin, addressList[curraddrPtr], str);
+
+	             if (DUMPTYPE == 0)
+       	             printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+			     else
+			         WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		         curraddrPtr++;
+	   	         while (curraddrPtr < alTotal)
+		         {
+		            GetString(fin, addressList[curraddrPtr], str);
+
+ 		            if (DUMPTYPE == 0)
+	          	         printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	                else
+	         	         WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		            curraddrPtr++;
+  		            printf("%d \n", curraddrPtr);
+		         }
+		      }
+	       }
+		}
+	}
+
+
+
+    fprintf(fout, "\n//ITEM HELP REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("\n\n\n//======================ITEM HELP===========================================\n");
+    else
+        printf("<CENTER><B>ITEM HELP</B></CENTER><BR>");
+
+	for (i = 0; i < 254; i++)
+	{
+		fseek(fin, 0x155200 + (i * 39) + 35, SEEK_SET);
+		tempAddr = fgetc(fin);
+		tempAddr += fgetc(fin) << 8;
+		tempAddr += fgetc(fin) << 16;
+		tempAddr += fgetc(fin) << 24;
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC50000)
+        {
+		   fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", 0x155200 + (i * 39) + 35, tempAddr);
+		   AddAddress(SNESToHex(tempAddr));
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+ 		   if (DUMPTYPE == 0)
+	           printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       else
+	           WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+  	          if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+  		      printf("%d \n", curraddrPtr);
+		   }
+		}
+	}
+
+
+
+    fprintf(fout, "\n//SIGNS, ETC. REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("\n\n\n//======================SIGNS, ETC.===========================================\n");
+    else
+        printf("<CENTER><B>SIGNS, ETC.</B></CENTER><BR>");
+
+    DumpSigns(fin);
+	for (i = 0; i < signTotal; i++)
+	{
+		tempAddr = signList[i];
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0)
+			fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", signBase[i], tempAddr);
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+        {
+		   AddAddress(SNESToHex(tempAddr));
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+ 		   if (DUMPTYPE == 0)
+	           printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       else
+	           WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+  	          if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+  		      printf("%d \n", curraddrPtr);
+		   }
+		}
+	}
+
+
+
+    fprintf(fout, "\n//ACTIONS & EFFECTS REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("\n\n\n//======================ACTIONS & EFFECTS===========================================\n");
+    else
+        printf("<CENTER><B>ACTIONS & EFFECTS</B></CENTER><BR>");
+
+    DumpActions(fin);
+	for (i = 0; i < actionTotal; i++)
+	{
+		tempAddr = actionList[i];
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0)
+			fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", actionBase[i], tempAddr);
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+        {
+		   AddAddress(SNESToHex(tempAddr));
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+ 		   if (DUMPTYPE == 0)
+	           printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       else
+	           WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+  	          if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+		   }
+		}
+	}
+
+
+
+    fprintf(fout, "\n//ENEMY ACTION POINTER REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("\n\n\n//======================ENEMY ACTIONS===========================================\n");
+    else
+        printf("<CENTER><B>ENEMY ACTIONS</B></CENTER><BR>");
+
+    DumpEnemyActions(fin);
+	for (i = 0; i < enactionTotal; i++)
+	{
+		tempAddr = enactionList[i];
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0)
+			fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", eaBase[i], tempAddr);
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+        {
+		   AddAddress(SNESToHex(tempAddr));
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+ 		   if (DUMPTYPE == 0)
+	           printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       else
+	           WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+  	          if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+		   }
+		}
+	}
+
+
+    fprintf(fout, "\n//PHONE TEXT POINTER REDIRECTS\n");
+    if (DUMPTYPE == 0)
+        printf("\n\n\n//======================PHONE TEXT===========================================\n");
+    else
+        printf("<CENTER><B>PHONE TEXT</B></CENTER><BR>");
+
+    printf("// NOTE: Some phone text is already earlier in the script\n\n");
+
+    DumpPhoneStuff(fin);
+	for (i = 0; i < phoneTotal; i++)
+	{
+		tempAddr = phoneList[i];
+
+        alreadyExists = AddressExists(SNESToHex(tempAddr));
+
+        strcpy(str, "");
+
+        if (tempAddr != 0)
+		    fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", phoneList[i], tempAddr);
+        if (tempAddr != 0 && !alreadyExists && tempAddr > 0xC00000)
+        {
+		   AddAddress(SNESToHex(tempAddr));
+
+		   GetString(fin, addressList[curraddrPtr], str);
+
+ 		   if (DUMPTYPE == 0)
+	           printf("%06X 0x%06X\n%s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       else
+	           WriteHTML(str, addressList[curraddrPtr], 0);
+
+  		   curraddrPtr++;
+
+	   	   while (curraddrPtr < alTotal)
+		   {
+		      GetString(fin, addressList[curraddrPtr], str);
+
+  	          if (DUMPTYPE == 0)
+	       	     printf("   %06X 0x%06X\n   %s\n\n", HexToSNES(addressList[curraddrPtr]), addressList[curraddrPtr], str);
+	       	  else
+	       	     WriteHTML(str, addressList[curraddrPtr], 10);
+
+  		      curraddrPtr++;
+		   }
+		}
+	}
+
+
+
+    if (DUMPTYPE == 0)
+    {
+        printf("\n\n\n//======================ENEMY NAMES===========================================\n");
+        printf("//    MAX LENGTH: 25 CHARACTERS ([00] included)\n");
+        printf("//============================================================================\n");
+	}
+    else
+        printf("<CENTER><B>ENEMY NAMES</B></CENTER><BR>");
+
+    for (i = 0; i < 230; i++)
+    {
+		tempAddr = 0x1597E8 + i * 0x5E;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+        for (j = 0; j < 25; j++)
+        {
+		   temp = fgetc(fin);
+
+		   if (temp == 0)
+			   break;
+		   else
+	           tempStr[j] = temp - 0x30;
+		}
+
+        strcat(tempStr, "[00]");
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+
+    if (DUMPTYPE == 0)
+    {
+        printf("\n\n\n//======================ITEM NAMES===========================================\n");
+        printf("//    MAX LENGTH: 25 CHARACTERS ([00] included)\n");
+        printf("//===========================================================================\n");
+	}
+    else
+        printf("<CENTER><B>ITEM NAMES</B></CENTER><BR>");
+
+    for (i = 0; i < 254; i++)
+    {
+		tempAddr = 0x155200 + i * 0x27;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+        for (j = 0; j < 25; j++)
+        {
+		   temp = fgetc(fin);
+
+		   if (temp == 0)
+			   break;
+		   else
+	           tempStr[j] = temp - 0x30;
+		}
+
+        strcat(tempStr, "[00]");
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+
+    if (DUMPTYPE == 0)
+    {
+        printf("\n\n\n//======================DEFAULT NAMES===========================================\n");
+	}
+    else
+        printf("<CENTER><B>ITEM NAMES</B></CENTER><BR>");
+
+    printf("// IGNORE THIS STUFF RIGHT HERE\n");
+    printf("//==============================================================================\n");
+    printf("DIRECTED 0x15F6CF [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F6F9 [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F723 [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F74D [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F777 [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F7A1 [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n");
+    printf("DIRECTED 0x15F7CB [00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00]\n\n");
+
+
+    printf("// MAX LENGTH: 5 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F6CF + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 5 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F6F9 + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 5 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F723 + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 5 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F74D + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 6 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F777 + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 6 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F7A1 + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+    printf("\n// MAX LENGTH: 6 LETTERS\n");
+    for (i = 0; i < 7; i++)
+    {
+		tempAddr = 0x15F7CB + i * 6;
+		fseek(fin, tempAddr, SEEK_SET);
+
+        for (j = 0; j < 200; j++)
+           tempStr[j] = 0;
+
+		for (j = 0; j < 6; j++)
+		{
+			temp = fgetc(fin);
+
+			if (temp != 0)
+		        tempStr[j] = temp - 0x30;
+		}
+
+		printf("DIRECTED 0x%06X %s\n", tempAddr, tempStr);
+	}
+
+
+
+    if (DUMPTYPE == 0)
+    {
+        printf("\n\n\n//======================MISC TEXT===========================================\n");
+        printf("// NOTE: If a line is under the MAX LENGTH, end it with at least one [00]!\n");
+        printf("//       Also, letters that use the saturn font count as five letters, so\n");
+        printf("//       be careful! Also, some of these things might not work with the\n");
+        printf("//       saturn font hack, so be on the lookout for weird stuff sometimes.\n");
+	    printf("//==========================================================================\n\n");
+	}
+    else
+        printf("<CENTER><B>MISC TEXT</B></CENTER><BR>");
+
+    DumpMiscLine(fin, 0x04C260, 14);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// TEXT SPEED STUFF\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C2E5, 25);
+    DumpMiscLine(fin, 0x04C274, 11);
+    DumpMiscLine(fin, 0x04C27F, 6);
+    DumpMiscLine(fin, 0x04C286, 6);
+    DumpMiscLine(fin, 0x04C28D, 6);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// FILE OPTIONS\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C294, 9);
+    DumpMiscLine(fin, 0x04C29D, 5);
+    DumpMiscLine(fin, 0x04C2A2, 7);
+    DumpMiscLine(fin, 0x04C2A9, 7);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// FILE MANAGEMENT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C2B0, 14);
+    DumpMiscLine(fin, 0x04C2BE, 32);
+    DumpMiscLine(fin, 0x04C2DE, 3);
+    DumpMiscLine(fin, 0x04C2E1, 4);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// SOUND SETUP\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C2FE, 28);
+    DumpMiscLine(fin, 0x04C31A, 6);
+    DumpMiscLine(fin, 0x04C321, 6);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// WINDOW SETUP\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C328, 37);
+    DumpMiscLine(fin, 0x04C34D, 13);
+    DumpMiscLine(fin, 0x04C35A, 12);
+    DumpMiscLine(fin, 0x04C366, 18);
+    DumpMiscLine(fin, 0x04C378, 14);
+    DumpMiscLine(fin, 0x04C386, 14);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// NAMING WINDOW TEXT\n");
+    printf("//--------------------------------------------\n");
+    printf("// NOTE: The duplication here is because there are\n");
+    printf("// two name entry windows: uppercase and lower case.\n\n");
+
+	fprintf(fout, "\n//NAMING WINDOW POINTER REDIRECTS\n");
+
+    temp = 0x2FA8D3;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 131);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+    temp = 0x2FA8D7;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 131);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+    temp = 0x2FA8DB;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 131);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+    temp = 0x2FA8DF;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 131);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+    temp = 0x2FA8E3;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 59);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+    temp = 0x2FA8E7;
+    tempAddr = GetAddress(fin, temp);
+    DumpNamingText(fin, SNESToHex(tempAddr), 44);
+	fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", temp, tempAddr);
+
+
+
+    printf("\n//--------------------------------------------\n");
+    printf("// NAMING TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C394, 40);
+    DumpMiscLine(fin, 0x04C3BC, 40);
+    DumpMiscLine(fin, 0x04C3E4, 40);
+    DumpMiscLine(fin, 0x04C40C, 40);
+    DumpMiscLine(fin, 0x04C434, 40);
+    DumpMiscLine(fin, 0x04C45C, 40);
+    DumpMiscLine(fin, 0x04C484, 40);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// CONFIRMATION SCREEN\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04C4AC, 14);
+    DumpMiscLine(fin, 0x04C4BA, 14);
+    DumpMiscLine(fin, 0x04C4C8, 13);
+    DumpMiscLine(fin, 0x04C4D5, 4);
+    DumpMiscLine(fin, 0x04C4D9, 5);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// STATUS MENU TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x2FA5BA, 6);
+    DumpMiscLine(fin, 0x2FA5C4, 11);
+    DumpMiscLine(fin, 0x2FA5D3, 15);
+    DumpMiscLine(fin, 0x2FA5E6, 18);
+    DumpMiscLine(fin, 0x2FA5FC, 20);
+    DumpMiscLine(fin, 0x2FA614, 8);
+    DumpMiscLine(fin, 0x2FA620, 8);
+    DumpMiscLine(fin, 0x2FA62C, 6);
+    DumpMiscLine(fin, 0x2FA636, 5);
+    DumpMiscLine(fin, 0x2FA63F, 9);
+    DumpMiscLine(fin, 0x2FA64C, 3);
+    DumpMiscLine(fin, 0x2FA653, 5);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// STATUS AILMENTS (SHOWN ON STATUS MENU)\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x045D70, 16);
+    DumpMiscLine(fin, 0x045D80, 16);
+    DumpMiscLine(fin, 0x045D90, 16);
+    DumpMiscLine(fin, 0x045DA0, 16);
+    DumpMiscLine(fin, 0x045DB0, 16);
+    DumpMiscLine(fin, 0x045DC0, 16);
+    DumpMiscLine(fin, 0x045DD0, 16);
+    DumpMiscLine(fin, 0x045DE0, 16);
+    DumpMiscLine(fin, 0x045DF0, 16);
+    DumpMiscLine(fin, 0x045E00, 16);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// BATTLE MENU TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x04A1E1, 12);
+    DumpMiscLine(fin, 0x04A1F1, 12);
+    DumpMiscLine(fin, 0x04A201, 12);
+    DumpMiscLine(fin, 0x04A211, 12);
+    DumpMiscLine(fin, 0x04A221, 12);
+    DumpMiscLine(fin, 0x04A231, 12);
+    DumpMiscLine(fin, 0x04A241, 12);
+    DumpMiscLine(fin, 0x04A251, 12);
+    DumpMiscLine(fin, 0x04A261, 12);
+    DumpMiscLine(fin, 0x04A271, 12);
+    DumpMiscLine(fin, 0x04A281, 12);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// OUTSIDE MENU TEXT \n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x2FA57A, 10);
+    DumpMiscLine(fin, 0x2FA584, 10);
+    DumpMiscLine(fin, 0x2FA58E, 10);
+    DumpMiscLine(fin, 0x2FA598, 10);
+    DumpMiscLine(fin, 0x2FA5A2, 10);
+    DumpMiscLine(fin, 0x2FA5AC, 10);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// ITEM SUBMENU TEXT \n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x43750, 6);
+    DumpMiscLine(fin, 0x43756, 6);
+    DumpMiscLine(fin, 0x4375C, 6);
+    DumpMiscLine(fin, 0x43762, 6);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// PHONE LIST TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x157CAE, 25);
+    DumpMiscLine(fin, 0x157CCD, 25);
+    DumpMiscLine(fin, 0x157CEC, 25);
+    DumpMiscLine(fin, 0x157D0B, 25);
+    DumpMiscLine(fin, 0x157D2A, 25);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// TELEPORT MENU TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x157A9F, 25);
+    DumpMiscLine(fin, 0x157ABE, 25);
+    DumpMiscLine(fin, 0x157ADD, 25);
+    DumpMiscLine(fin, 0x157AFC, 25);
+    DumpMiscLine(fin, 0x157B1B, 25);
+    DumpMiscLine(fin, 0x157B3A, 25);
+    DumpMiscLine(fin, 0x157B59, 25);
+    DumpMiscLine(fin, 0x157B78, 25);
+    DumpMiscLine(fin, 0x157B97, 25);
+    DumpMiscLine(fin, 0x157BB6, 25);
+    DumpMiscLine(fin, 0x157BD5, 25);
+    DumpMiscLine(fin, 0x157BF4, 25);
+    DumpMiscLine(fin, 0x157C32, 25);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// PSI-RELATED TEXT\n");
+    printf("//--------------------------------------------\n\n");
+	DumpMiscLine(fin, 0x158F7A, 25);
+
+	printf("// Note the spaces at the end of these PSI names\n");
+	DumpMiscLine(fin, 0x158F93, 25);
+	DumpMiscLine(fin, 0x158FAC, 25);
+	DumpMiscLine(fin, 0x158FC5, 25);
+	DumpMiscLine(fin, 0x158FDE, 25);
+	DumpMiscLine(fin, 0x158FF7, 25);
+	DumpMiscLine(fin, 0x159010, 25);
+	DumpMiscLine(fin, 0x159029, 25);
+	DumpMiscLine(fin, 0x159042, 25);
+	DumpMiscLine(fin, 0x15905B, 25);
+	DumpMiscLine(fin, 0x159074, 25);
+	DumpMiscLine(fin, 0x15908D, 25);
+	DumpMiscLine(fin, 0x1590A6, 25);
+	DumpMiscLine(fin, 0x1590BF, 25);
+	DumpMiscLine(fin, 0x1590D8, 25);
+	DumpMiscLine(fin, 0x1590F1, 25);
+	DumpMiscLine(fin, 0x15910A, 25);
+
+    printf("\n\n");
+    DumpMiscLine(fin, 0x3F290, 8);
+    DumpMiscLine(fin, 0x3F298, 8);
+    DumpMiscLine(fin, 0x3F2A0, 8);
+    DumpMiscLine(fin, 0x3F2A8, 8);
+
+    printf("\n\n");
+    DumpMiscLine(fin, 0x3F31C, 8);
+    DumpMiscLine(fin, 0x3F324, 20);
+    DumpMiscLine(fin, 0x3F338, 20);
+    DumpMiscLine(fin, 0x3F34C, 20);
+    DumpMiscLine(fin, 0x3F360, 20);
+    DumpMiscLine(fin, 0x3F374, 20);
+    DumpMiscLine(fin, 0x3F388, 20);
+    DumpMiscLine(fin, 0x3F39C, 20);
+    DumpMiscLine(fin, 0x3F3B0, 20);
+    DumpMiscLine(fin, 0x3F3C4, 20);
+    DumpMiscLine(fin, 0x3F3D8, 20);
+
+
+
+
+
+
+
+    printf("\n//--------------------------------------------\n");
+    printf("// MISC WEIRD TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x3FD2B, 36);
+
+    printf("// NOTE: I don't 100%% fully understand how the following work, so look out for problems\n");
+    DumpMiscLine(fin, 0x456F2, 16);
+    DumpMiscLine(fin, 0x45702, 12);
+    DumpMiscLine(fin, 0x45D4D, 35);
+    DumpMiscLine(fin, 0x45E10, 12);
+    DumpMiscLine(fin, 0x45E1C, 8);
+    DumpMiscLine(fin, 0x45E24, 8);
+
+    printf("// NOTE: I'm not sure why there are spaces in front of these words, but leave them in\n");
+    DumpMiscLine(fin, 0x45E2C, 11);
+    DumpMiscLine(fin, 0x45E37, 11);
+    DumpMiscLine(fin, 0x45E42, 11);
+    DumpMiscLine(fin, 0x45E4D, 11);
+
+    DumpMiscLine(fin, 0x45E58, 8);
+    DumpMiscLine(fin, 0x45E60, 8);
+    DumpMiscLine(fin, 0x45E68, 8);
+    DumpMiscLine(fin, 0x45E70, 8);
+    DumpMiscLine(fin, 0x45E78, 9);
+
+    printf("// Note the extra space at the beginning!\n");
+    DumpMiscLine(fin, 0x45E81, 6);
+    DumpMiscLine(fin, 0x45E87, 4);
+
+
+    printf("\n//--------------------------------------------\n");
+    printf("// LUMINE HALL TEXT\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x048237, 213);
+
+    printf("\n//--------------------------------------------");
+    printf("\n// NOTE: The coffee and tea scenes use different control codes than the regular text.\n");
+    printf("// 00    = End of text (needs to be at the very end)\n");
+    printf("// 01 XX = Move the text horizontally over to position XX\n");
+    printf("// 08 XX = Print character name XX\n");
+    printf("// 09    = Drop down one line\n");
+    printf("//--------------------------------------------\n");
+    printf("// COFFEE SCENE\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x210200, 1610);
+
+    printf("\n//--------------------------------------------\n");
+    printf("// TEA SCENE\n");
+    printf("//--------------------------------------------\n\n");
+    DumpMiscLine(fin, 0x21084A, 1332);
+
+
+    fprintf(fout, "\n//FLYOVER TEXT REDIRECTS\n");
+    printf("\n//--------------------------------------------\n");
+    printf("// NOTE: The codes for these scenes are like the coffee/tea scenes, but there's one more:\n");
+    printf("// 02 XX = Move the text vertically down to position XX\n");
+    printf("//--------------------------------------------\n");
+    printf("// FLYOVER SCENES\n");
+    printf("//--------------------------------------------\n\n");
+    for (i = 0; i < 8; i++)
+    {
+		fseek(fin, 0x4A0A4 + (i * 4), SEEK_SET);
+		tempAddr = fgetc(fin);
+		tempAddr += fgetc(fin) << 8;
+		tempAddr += fgetc(fin) << 16;
+		tempAddr += fgetc(fin) << 24;
+
+		DumpFlyoverLine(fin, SNESToHex(tempAddr));
+		fprintf(fout, "DIRECTED 0x%06X [_PRINTADDR %06X]\n", 0x4A0A4 + (i * 4), tempAddr);
+	}
+
+
+    if (DUMPTYPE == 0)
+    {
+		fclose(fout);
+
+		fout = fopen("_temp.txt", "r");
+		fgets(tempStr, 200, fout);
+		while (!feof(fout))
+		{
+			printf(tempStr);
+			fgets(tempStr, 200, fout);
+		}
+	}
+
+    printf("\n\nENDSCRIPT\n");
+
+//    printf("\nTOTAL LINES: %d\n", alTotal);
+//    printf("%d\n%d\n%d\n", signTotal, actionTotal, enactionTotal);
+
+    fclose(fout);
+	fclose(fin);
+
+	return 0;
+}
+
+//--------------------------------------------------------------------------
+
+void GetString(FILE* fin, int address, char string[])
+{
+	bool          eol = false;
+	bool          menublock = false;
+	int           counter = 0;       // also used to break out of infinite loop
+	int           temp;
+	int           temp2;
+	int           totalArgs = 0;
+	int           i;                 // for loops :)
+	char          tempStr[8000] = "";
+	char          tempStr2[8000] = "";
+	unsigned char ch;
+	unsigned char ch2;
+	unsigned char mch[2000];
+
+
+    strcpy(string, "");
+    strcpy(tempStr, "");
+	fseek(fin, address, SEEK_SET);
+
+    ch = fgetc(fin);
+    while (eol != true && counter < 2000)
+    {
+		//printf("%02X %s\n", ch, string);
+        // Parse actual letters
+		if ((ch >= 0x50) && (ch <= 0xAA))
+		{
+			if (ch != 0)
+			   ch2 = ch - 0x30;
+			else
+			   ch2 = 0;
+
+			if (ch2 == '_')
+			   ch2 = ' ';
+
+			sprintf(tempStr, "%c", ch2);
+			strcat(string, tempStr);
+
+			counter++;
+		}
+
+		// VERY ODD REGULAR TEXT
+		else if (ch == 0xAC)
+		{
+		   sprintf(tempStr, "\"");
+		   strcat(string, tempStr);
+
+		   counter++;
+		}
+
+		// Parse control codes
+        else
+        {
+			switch (ch)
+			{
+				case 0x00: strcat(tempStr, "[LINE]");
+				           counter++;
+				           break;
+
+				case 0x01: strcat(tempStr, "[ABSLINE]");
+				           counter++;
+				           break;
+
+				case 0x02: if (menublock == true)
+						   {
+							   strcat(tempStr, "[02]");
+							   menublock = false;
+				           }
+				           else
+				           {
+  				               strcat(tempStr, "[END]");
+				               eol = true;
+						   }
+
+				           counter++;
+				           break;
+
+				case 0x03: strcat(tempStr, "[PAUSE]");
+				           counter++;
+				           break;
+
+				case 0x04: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+				           sprintf(tempStr, "[FLAGON %03X]", temp);
+				           counter += 3;
+				           break;
+
+				case 0x05: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+				           sprintf(tempStr, "[FLAGOFF %03X]", temp);
+				           counter += 3;
+				           break;
+
+				case 0x06: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+
+				           temp2 = fgetc(fin);
+				           temp2 += fgetc(fin) << 8;
+				           temp2 += fgetc(fin) << 16;
+				           temp2 += fgetc(fin) << 24;
+
+				           AddAddress(SNESToHex(temp2));
+
+				           sprintf(tempStr, "[IFFLAGSET %03X %06X]", temp, temp2);
+				           counter += 7;
+				           break;
+
+				case 0x07: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+				           sprintf(tempStr, "[LOADFLAG %03X]", temp);
+				           counter += 3;
+				           break;
+
+				case 0x08: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+				           temp += fgetc(fin) << 16;
+				           temp += fgetc(fin) << 24;
+
+                           AddAddress(SNESToHex(temp));
+
+				           sprintf(tempStr, "[GOSUB %06X]", temp);
+				           counter += 5;
+				           break;
+
+				case 0x09: temp = fgetc(fin);
+                           sprintf(tempStr, "[BRANCH %02X", temp);
+
+				           for (i = 0; i < temp; i++)
+				           {
+  						      temp2 = fgetc(fin);
+				              temp2 += fgetc(fin) << 8;
+				              temp2 += fgetc(fin) << 16;
+				              temp2 += fgetc(fin) << 24;
+
+                              AddAddress(SNESToHex(temp2));
+
+                              sprintf(tempStr2, " %06X", temp2);
+                              strcat(tempStr, tempStr2);
+						   }
+
+
+				           strcat(tempStr, "]");
+				           counter += ((4 * temp) + 2);
+				           break;
+
+				case 0x0A: temp = fgetc(fin);
+				           temp += fgetc(fin) << 8;
+				           temp += fgetc(fin) << 16;
+				           temp += fgetc(fin) << 24;
+
+                           AddAddress(SNESToHex(temp));
+
+				           sprintf(tempStr, "[GOTO %06X]", temp);
+				           counter += 5;
+				           eol = true;
+				           break;
+
+                // UNKNOWN CODE, VARIABLE-RELATED THOUGH
+				case 0x0B: temp = fgetc(fin);
+				           sprintf(tempStr, "[CHECKEQUAL %02X]", temp);
+				           counter += 2;
+				           break;
+
+                // UNKNOWN CODE, VARIABLE-RELATED THOUGH
+				case 0x0C: temp = fgetc(fin);
+				           sprintf(tempStr, "[CHECKNOTEQUAL %02X]", temp);
+				           counter += 2;
+				           break;
+
+
+                // UNKNOWN CODE, VARIABLE-RELATED THOUGH
+				case 0x0D: temp = fgetc(fin);
+				           sprintf(tempStr, "[COPYTOWMEM %02X]", temp);
+				           counter += 2;
+				           break;
+
+                // UNKNOWN CODE, VARIABLE-RELATED THOUGH
+				case 0x0E: temp = fgetc(fin);
+				           sprintf(tempStr, "[COPYTOSMEM %02X]", temp);
+				           counter += 2;
+				           break;
+
+                // NOT ENTIRELY SURE
+			    case 0x0F: sprintf(tempStr, "[INCMEM]", address);
+			               counter++;
+			               break;
+
+				case 0x10: temp = fgetc(fin);
+				           sprintf(tempStr, "[DELAY %02X]", temp);
+				           counter += 2;
+				           break;
+
+                // NOT 100% SURE ABOUT THIS ONE, THINK IT'S CURSOR/MENU-RELATED
+				case 0x11: strcat(tempStr, "[11]");
+				           counter++;
+				           break;
+
+				case 0x12: strcat(tempStr, "[CLEARLINE]");
+				           counter++;
+				           break;
+
+				case 0x13: strcat(tempStr, "[HALT1]");
+				           counter++;
+				           break;
+
+				case 0x14: strcat(tempStr, "[HALT2]");
+				           counter++;
+				           break;
+
+                // LOAD COMPRESSED TEXT
+				case 0x15:
+				case 0x16:
+				case 0x17: temp = ((ch - 0x15) * 256) + fgetc(fin);
+			               strcat(tempStr, comprText[temp]);
+
+						   counter += 2;
+						   break;
+
+			    case 0x18: ch2 = fgetc(fin);
+
+			               switch (ch2)
+			               {
+							   case 0x00: sprintf(tempStr, "[CLOSEWIN]");
+							              counter += 2;
+							              break;
+
+							   case 0x01: temp = fgetc(fin);
+							              sprintf(tempStr, "[OPENWIN %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x02: sprintf(tempStr, "[%02X %02X]", ch, ch2);
+							              counter += 2;
+							              break;
+
+							   case 0x03: temp = fgetc(fin);
+							              sprintf(tempStr, "[SELECTWIN %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x04: sprintf(tempStr, "[CLOSEALLWIN]");
+							              counter += 2;
+							              break;
+
+							   case 0x05: mch[0] = fgetc(fin);
+							              mch[1] = fgetc(fin);
+							              sprintf(tempStr, "[ALIGNTEXT %02X %02X]", mch[0], mch[1]);
+							              counter += 4;
+							              break;
+
+							   case 0x06: sprintf(tempStr, "[CLEARWIN]");
+							              counter += 2;
+							              break;
+
+							   case 0x07: temp = fgetc(fin);
+				           				  temp += fgetc(fin) << 8;
+				           				  temp += fgetc(fin) << 16;
+				            			  temp += fgetc(fin) << 24;
+
+				            			  temp2 = fgetc(fin);
+
+				            			  if (temp2 == 0)
+				            			  	  sprintf(tempStr, "[CHECKGREATERTHAN %08X]", temp);
+				            			  else if (temp2 == 1)
+				            			      sprintf(tempStr, "[CHECKLESSTHAN %08X]", temp);
+
+				            			  counter += 7;
+				            			  break;
+
+							   case 0x09: temp = fgetc(fin);
+							              sprintf(tempStr, "[%02X %02X %02X]", ch, ch2, temp);
+							              counter += 3;
+							              break;
+
+							   case 0x0A: sprintf(tempStr, "[OPENMONEYWIN]");
+							              counter += 2;
+							              break;
+
+                               // THIS ONE IS DOCUMENTED, BUT IT'S USE IS UNKNOWN
+							   case 0x0D: //printf("%06X Found undocumented code!\n", address);
+							              mch[0] = fgetc(fin);
+							              mch[1] = fgetc(fin);
+							              sprintf(tempStr, "[18 0D %02X %02X]", mch[0], mch[1]);
+							              counter += 4;
+							              break;
+
+
+                               // UNCERTAIN OF ALL THE OTHERS
+							   default:   printf("%06X Found undocumented code!\n", address);
+							              sprintf(tempStr, "[18 %02X]", ch2);
+							              counter += 2;
+							              break;
+
+						   }
+						   break;
+
+				case 0x19: ch2 = fgetc(fin);
+
+                           // DO THIS STUFF BETTER LATER
+						   switch (ch2)
+						   {
+							   case 0x02: menublock = true;
+
+							   case 0x04:
+							   case 0x14:
+							   case 0x1E:
+							   case 0x1F:
+							   case 0x20: totalArgs = 0;
+							              break;
+
+							   case 0x10:
+							   case 0x11:
+							   case 0x18:
+							   case 0x1A:
+							   case 0x1B:
+							   case 0x21:
+							   case 0x25:
+							   case 0x26:
+							   case 0x27:
+							   case 0x28: totalArgs = 1;
+							              break;
+
+							   case 0x16:
+							   case 0x19:
+							   case 0x1C:
+							   case 0x1D: totalArgs = 2;
+							              break;
+
+							   case 0x05: totalArgs = 3;
+							              break;
+
+							   case 0x22: totalArgs = 4;
+							              break;
+
+							   case 0x23:
+							   case 0x24: totalArgs = 5;
+							              break;
+
+							   default:   printf("***undocumented code 19\n");
+							              totalArgs = 0;
+							              break;
+						   }
+
+						   sprintf(tempStr, "[%02X %02X", ch, ch2);
+						   for (i = 0; i < totalArgs; i++)
+						   {
+							   sprintf(tempStr2, " %02X", fgetc(fin));
+							   strcat(tempStr, tempStr2);
+						   }
+						   strcat(tempStr, "]");
+
+                           counter += (2 + totalArgs);
+						   break;
+
+				case 0x1A: ch2 = fgetc(fin);
+
+				           switch (ch2)
+				           {
+							   // OPEN PARTY SELECTION WINDOW
+							   case 0x01: sprintf(tempStr, "[%02X %02X", ch, ch2);
+
+                                          for (i = 0; i < 4; i++)
+                                          {
+										      temp = fgetc(fin);
+				           				      temp += fgetc(fin) << 8;
+				           				      temp += fgetc(fin) << 16;
+				            			      temp += fgetc(fin) << 24;
+
+				            			      AddAddress(SNESToHex(temp));
+
+						   	                  sprintf(tempStr2, " %06X", temp);
+						   	                  strcat(tempStr, tempStr2);
+						                  }
+						                  strcat(tempStr, "]");
+
+						                  counter += 18;
+						                  break;
+
+						       case 0x05: mch[0] = fgetc(fin);
+						                  mch[1] = fgetc(fin);
+						                  sprintf(tempStr, "[%02X %02X %02X %02X]", ch, ch2, mch[0], mch[1]);
+
+						                  counter += 4;
+						                  break;
+
+							   case 0x06: temp = fgetc(fin);
+							              sprintf(tempStr, "[SHOPWINDOW %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   default:   sprintf(tempStr, "[%02X %02X]", ch, ch2);
+							              counter += 2;
+							              break;
+						   }
+						   break;
+
+				case 0x1B: ch2 = fgetc(fin);
+
+				           switch(ch2)
+				           {
+							   case 0x00:
+							   case 0x01:
+							   case 0x04:
+							   case 0x05:
+							   case 0x06: sprintf(tempStr, "[%02X %02X]", ch, ch2);
+							              counter += 2;
+							              break;
+
+							   case 0x02:
+							   case 0x03: temp = fgetc(fin);
+				           				  temp += fgetc(fin) << 8;
+				           				  temp += fgetc(fin) << 16;
+				            			  temp += fgetc(fin) << 24;
+
+				            			  AddAddress(SNESToHex(temp));
+
+				            			  sprintf(tempStr, "[%02X %02X %06X]", ch, ch2, temp);
+				            			  counter += 6;
+				            			  break;
+
+							   default:   printf("***undocumented code 1b %02X\n", ch2);
+							              sprintf(tempStr, "[%02X %02X]", ch, ch2);
+							              counter += 2;
+							              break;
+						   }
+						   break;
+
+				case 0x1C: ch2 = fgetc(fin);
+
+				           switch(ch2)
+				           {
+							   case 0x00: temp = fgetc(fin);
+							              sprintf(tempStr, "[TEXTCOLOR %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x01: temp = fgetc(fin);
+							              sprintf(tempStr, "[SHOWSTAT %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x02: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTNAME %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x03: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTCHAR %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x04: sprintf(tempStr, "[OPENHPWIN]");
+							              counter += 2;
+							              break;
+
+							   case 0x05: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTITEM %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x06: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTTELEPORT %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x07: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTHORIZONTAL %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x08: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTIMAGE %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x0A: temp = fgetc(fin);
+				           				  temp += fgetc(fin) << 8;
+				           				  temp += fgetc(fin) << 16;
+				            			  temp += fgetc(fin) << 24;
+
+							              sprintf(tempStr, "[PRINTNUMBER %02X]", temp);
+							              counter += 6;
+							              break;
+
+							   case 0x0B: temp = fgetc(fin);
+				           				  temp += fgetc(fin) << 8;
+				           				  temp += fgetc(fin) << 16;
+				            			  temp += fgetc(fin) << 24;
+
+							              sprintf(tempStr, "[PRINTNUMMONEY %02X]", temp);
+							              counter += 6;
+							              break;
+
+							   case 0x0C: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTVERTICAL %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x0D: sprintf(tempStr, "[PRINTPERFORMER]");
+							              counter += 2;
+							              break;
+
+							   case 0x0E: sprintf(tempStr, "[PRINTRECIPIENT]");
+							              counter += 2;
+							              break;
+
+							   case 0x0F: sprintf(tempStr, "[PRINTFILENUM]");
+							              counter += 2;
+							              break;
+
+							   case 0x11: temp = fgetc(fin);
+							              sprintf(tempStr, "[%02X %02X %02X]", ch, ch2, temp);
+							              counter += 3;
+							              break;
+
+							   case 0x12: temp = fgetc(fin);
+							              sprintf(tempStr, "[PRINTPSI %02X]", temp);
+							              counter += 3;
+							              break;
+
+							   case 0x13: mch[0] = fgetc(fin);
+							              mch[1] = fgetc(fin);
+							              sprintf(tempStr, "[%02X %02X %02X %02X]", ch, ch2, mch[0], mch[1]);
+							              counter += 4;
+							              break;
+
+							   case 0x14: temp = fgetc(fin);
+							              sprintf(tempStr, "[%02X %02X %02X]", ch, ch2, temp);
+							              counter += 3;
+							              break;
+
+							   default:   printf("***undocumented code 1c\n");
+							              temp = fgetc(fin);
+							              sprintf(tempStr, "[%02X %02X %02X]", ch, ch2, temp);
+							              counter += 3;
+							              break;
+						   }
+						   break;
+
+                // MESS WITH THIS STUFF LATER
+				case 0x1D: ch2 = fgetc(fin);
+
+				           switch (ch2)
+				           {
+							   case 0x00:
+							   case 0x01:
+							   case 0x04:
+							   case 0x05:
+							   case 0x08:
+							   case 0x09:
+							   case 0x0C:
+							   case 0x0E:
+							   case 0x0F:
+							   case 0x10:
+							   case 0x11:
+							   case 0x12:
+							   case 0x13:
+							   case 0x15: totalArgs = 2;
+							              break;
+
+							   case 0x02:
+							   case 0x03:
+							   case 0x0A:
+							   case 0x0B:
+							   case 0x18:
+							   case 0x19:
+							   case 0x21:
+							   case 0x23:
+							   case 0x24: totalArgs = 1;
+							              break;
+
+							   case 0x06:
+							   case 0x07:
+							   case 0x14:
+							   case 0x17: totalArgs = 4;
+							              break;
+
+							   case 0x0D: totalArgs = 3;
+							              break;
+
+							   case 0x20:
+							   case 0x22: totalArgs = 0;
+							              break;
+
+							   default:   printf("***undocumented code 1d\n");
+							              totalArgs = 0;
+							              break;
+						   }
+
+						   sprintf(tempStr, "[%02X %02X", ch, ch2);
+						   for (i = 0; i < totalArgs; i++)
+						   {
+						   	   sprintf(tempStr2, " %02X", fgetc(fin));
+						   	   strcat(tempStr, tempStr2);
+						   }
+						   strcat(tempStr, "]");
+
+						   counter += (2 + totalArgs);
+						   break;
+
+                case 0x1E: ch2 = fgetc(fin);
+
+                           switch(ch2)
+                           {
+							   case 0x00:
+							   case 0x04:
+							   case 0x0A:
+							   case 0x0B:
+							   case 0x0C:
+							   case 0x0D:
+							   case 0x0E: totalArgs = 2;
+							              break;
+
+							   case 0x09: totalArgs = 4;
+							              break;
+
+							   default:   printf("***undocumented code 1e\n");
+							              totalArgs = 2;
+							              break;
+						   }
+
+						   sprintf(tempStr, "[%02X %02X", ch, ch2);
+						   for (i = 0; i < totalArgs; i++)
+						   {
+						   	   sprintf(tempStr2, " %02X", fgetc(fin));
+						   	   strcat(tempStr, tempStr2);
+						   }
+						   strcat(tempStr, "]");
+
+						   counter += (2 + totalArgs);
+						   break;
+
+				case 0x1F: ch2 = fgetc(fin);
+
+				           switch(ch2)
+				           {
+							   case 0x30: sprintf(tempStr, "[SATURNOFF]", temp);
+							              counter += 2;
+							              totalArgs = -1;
+							              break;
+
+							   case 0x31: sprintf(tempStr, "[SATURNON]", temp);
+							              counter += 2;
+							              totalArgs = -1;
+							              break;
+
+							   case 0x00:
+							   case 0x13:
+							   case 0x1B:
+							   case 0x1C:
+							   case 0x20:
+							   case 0x40:
+							   case 0x71:
+							   case 0x81:
+							   case 0x83:
+							   case 0xE6:
+							   case 0xE7:
+							   case 0xE9:
+							   case 0xEA:
+							   case 0xEB:
+							   case 0xEC:
+							   case 0xEE:
+							   case 0xEF: totalArgs = 2;
+							              break;
+
+							   case 0x01:
+							   case 0x02:
+							   case 0x04:
+							   case 0x07:
+							   case 0x11:
+							   case 0x12:
+							   case 0x14:
+							   case 0x1D:
+							   case 0x21:
+							   case 0x23:
+							   case 0x41:
+							   case 0x52:
+							   case 0x60:
+							   case 0x62:
+							   case 0x67:
+							   case 0xD0:
+							   case 0xD2:
+							   case 0xD3:
+							   case 0xE5:
+							   case 0xE8:
+							   case 0xF0:
+							   case 0xF4: totalArgs = 1;
+							              break;
+
+							   case 0x03:
+							   case 0x05:
+							   case 0x06:
+							   case 0x50:
+							   case 0x51:
+							   case 0x61:
+							   case 0x64:
+							   case 0x65:
+							   case 0x68:
+							   case 0x69:
+							   case 0x90:
+							   case 0xA0:
+							   case 0xA1:
+							   case 0xA2:
+							   case 0xB0:
+							   case 0xD1:
+							   case 0xED: totalArgs = 0;
+							              break;
+
+							   case 0x15:
+							   case 0x17: totalArgs = 5;
+							              break;
+
+							   case 0x16:
+							   case 0x1A:
+							   case 0x1E:
+							   case 0x1F:
+							   case 0xE1:
+							   case 0xE4:
+							   case 0xF3: totalArgs = 3;
+							              break;
+
+							   case 0x63:
+							   case 0xF1:
+							   case 0xF2: totalArgs = 4;
+							              break;
+
+							   case 0x66: totalArgs = 6;
+							              break;
+
+							   case 0x18:
+							   case 0x19: totalArgs = 7;
+							              break;
+
+							   case 0xC0: break;
+
+							   default:   printf("***undocumented code 1f %02X\n", ch2);
+							              totalArgs = 0;
+							              break;
+						   }
+
+						   if (ch2 == 0xC0)
+						   {
+							   temp = fgetc(fin);
+
+							   sprintf(tempStr, "[MULTIGOSUB %02X", temp);
+							   for (i = 0; i < temp; i++)
+							   {
+							       temp2 = fgetc(fin);
+  		          	               temp2 += fgetc(fin) << 8;
+				           		   temp2 += fgetc(fin) << 16;
+				            	   temp2 += fgetc(fin) << 24;
+
+				            	   AddAddress(SNESToHex(temp2));
+
+								   sprintf(tempStr2, " %06X", temp2);
+								   strcat(tempStr, tempStr2);
+							   }
+							   strcat(tempStr, "]");
+
+							   counter += ((temp * 4) + 2);
+						   }
+						   else if (totalArgs != -1)
+						   {
+							   sprintf(tempStr, "[%02X %02X", ch, ch2);
+							   for (i = 0; i < totalArgs; i++)
+							   {
+							      sprintf(tempStr2, " %02X", fgetc(fin));
+							      strcat(tempStr, tempStr2);
+					      	   }
+							   strcat(tempStr, "]");
+
+						       counter += (2 + totalArgs);
+						   }
+
+						   break;
+
+				default: sprintf(tempStr, "[%02X]", ch);
+				         printf("******* ERROR! UNKNOWN CODE FOUND AT %06X! ([%02X])\n", address, ch);
+				         break;
+			}
+
+			if (DUMPTYPE == 0 || ch == 0x15 || ch == 0x16 || ch == 0x17)
+  			   strcat(string, tempStr);
+  			else if (DUMPTYPE == 1 && ch == 0)
+  			   strcat(string, "<BR>");
+  			else if (DUMPTYPE == 1 && ch == 2 && eol == false)
+  			   strcat(string, " ");
+		}
+
+		ch = fgetc(fin);
+		strcpy(tempStr, "");
+	}
+}
+
+//--------------------------------------------------------------------------
+
+void LoadCompressedText(FILE* rom)
+{
+   // Loads the look-up table into the comprText list of strings.
+   // Assumes rom is in read binary mode.
+
+   unsigned char ch;
+   char          strLoc;
+
+   comprText[0][0] = 0;
+
+   fseek(rom, 0x8be3e, SEEK_SET);
+
+   for (int i = 1; i < 768; i++)
+   {
+      strLoc = 0;
+      ch = 255;
+
+      while (ch != 0)
+      {
+         ch = fgetc(rom);
+
+         if (ch != 0)
+            comprText[i][strLoc] = ch - 0x30;
+         else
+            comprText[i][strLoc] = 0;
+
+         if (comprText[i][strLoc] == '_')
+             comprText[i][strLoc] = ' ';
+
+         strLoc++;
+      }
+   }
+}
+
+//--------------------------------------------------------------------------
+
+void AddAddress(int address)
+{
+	int  i;
+	bool found = false;
+
+    if (address == 0)
+       return;
+
+	for (i = 0; i < alTotal; i++)
+	{
+		if (address == addressList[i])
+		{
+		   found = true;
+		   break;
+		}
+	}
+
+	if (found == false)
+	{
+	   addressList[alTotal] = address;
+	   alTotal++;
+	}
+}
+
+//--------------------------------------------------------------------------
+
+unsigned int HexToSNES(unsigned int address)
+{
+   // Converts good-ol regular hex addresses into the SNES-style addresses.
+   // In this case, it's assumed the ROM is a hi-rom with a header.
+
+   unsigned int retVal;
+
+   retVal = (address + 0xc00000) - 0x200;
+
+   if (address == 0)
+      retVal = 0;
+
+   return retVal;
+}
+
+//--------------------------------------------------------------------------
+
+unsigned int SNESToHex(unsigned int address)
+{
+   // Converts an SNES-style address (hi-rom, with header) to a nice
+   // handy hex address.
+
+   unsigned int retVal;
+
+   retVal = (address - 0xc00000) + 0x200;
+
+   if (address == 0)
+      retVal = 0;
+
+   return retVal;
+}
+
+//--------------------------------------------------------------------------
+
+bool AddressExists(int address)
+{
+	int  i;
+	bool found = false;
+
+	if (address == 0)
+	   return true;
+
+	for (i = 0; i < alTotal; i++)
+	{
+		if (address == addressList[i])
+		{
+		   found = true;
+		   break;
+		}
+	}
+
+    return found;
+}
+
+//--------------------------------------------------------------------------
+
+void WriteHTML(char* str, int address, int spaces)
+{
+	FILE* fout;
+	char  tempStr[800];
+	int   i;
+
+	if (strlen(str) == 0)
+	   return;
+
+	for (i = 0; i < spaces; i++)
+	   printf("&nbsp;");
+
+/*    if (strlen(str) == 0)
+       return;
+
+    sprintf(tempStr, "html\\%06X.html", address);
+    fout = fopen(tempStr, "w");
+
+    fputs(str, fout);
+
+    fclose(fout);*/
+
+    printf("%s<BR><BR>\n", str);
+}
+
+//--------------------------------------------------------------------------
+
+void DumpSigns(FILE* fin)
+{
+	int  i;
+	int  address;
+	char ch;
+
+	fseek(fin, 0xF0200, SEEK_SET);
+	for (i = 0; i < 128; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 11; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 4; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 8; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 4; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 9; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 77; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 8; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 25; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 71; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 7; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 9; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 14; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 1; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 82; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 1; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 27; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 1; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 181; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+    for (i = 0; i < 3; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 1; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 6; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 48; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 8; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 3; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 31; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+    for (i = 0; i < 5; i++)
+    {
+		signBase[signTotal] = ftell(fin);
+    	address = fgetc(fin);
+    	address += fgetc(fin) << 8;
+    	address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+    	fgetc(fin);
+    	fgetc(fin);
+	}
+
+	signBase[signTotal] = ftell(fin);
+   	address = fgetc(fin);
+   	address += fgetc(fin) << 8;
+   	address += fgetc(fin) << 16;
+	address += fgetc(fin) << 24;
+	signList[signTotal++] = address;
+
+	for (i = 0; i < 34; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	signBase[signTotal] = ftell(fin);
+    address = fgetc(fin);
+    address += fgetc(fin) << 8;
+    address += fgetc(fin) << 16;
+ 	address += fgetc(fin) << 24;
+    signList[signTotal++] = address;
+
+   	fgetc(fin);
+   	fgetc(fin);
+   	fgetc(fin);
+    fgetc(fin);
+    fgetc(fin);
+    fgetc(fin);
+    fgetc(fin);
+    fgetc(fin);
+    fgetc(fin);
+
+	signBase[signTotal] = ftell(fin);
+    address = fgetc(fin);
+    address += fgetc(fin) << 8;
+    address += fgetc(fin) << 16;
+ 	address += fgetc(fin) << 24;
+    signList[signTotal++] = address;
+
+	signBase[signTotal] = ftell(fin);
+    address = fgetc(fin);
+    address += fgetc(fin) << 8;
+    address += fgetc(fin) << 16;
+ 	address += fgetc(fin) << 24;
+    signList[signTotal++] = address;
+
+	for (i = 0; i < 22; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 44; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 26; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 3; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 44; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+
+	for (i = 0; i < 6; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+	}
+
+	for (i = 0; i < 13; i++)
+	{
+		signBase[signTotal] = ftell(fin);
+		address = fgetc(fin);
+		address += fgetc(fin) << 8;
+		address += fgetc(fin) << 16;
+		address += fgetc(fin) << 24;
+		signList[signTotal++] = address;
+
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+		ch = fgetc(fin);
+	}
+}
+
+//--------------------------------------------------------------------------
+
+void DumpActions(FILE* fin)
+{
+   int           i;
+   int           j;
+   int           temp;
+   unsigned char ch[20];
+
+   fseek(fin, 0x157D68, SEEK_SET);
+
+   for (i = 0; i < 0x13f; i++)
+   {
+	  ch[0] = fgetc(fin);
+	  ch[1] = fgetc(fin);
+	  ch[2] = fgetc(fin);
+	  ch[3] = fgetc(fin);
+
+	  actionBase[actionTotal] = ftell(fin);
+	  ch[4] = fgetc(fin);
+	  ch[5] = fgetc(fin);
+	  ch[6] = fgetc(fin);
+	  ch[7] = fgetc(fin);
+
+	  ch[8] = fgetc(fin);
+	  ch[9] = fgetc(fin);
+	  ch[10] = fgetc(fin);
+	  ch[11] = fgetc(fin);
+
+      temp = ch[4] + (ch[5] << 8) + (ch[6] << 16) + (ch[7] << 24);
+
+      actionList[actionTotal++] = temp;
+   }
+}
+
+//--------------------------------------------------------------------------
+
+void DumpEnemyActions(FILE* fin)
+{
+   int           i;
+   int           temp;
+
+   for (i = 0; i < 230; i++)
+   {
+      fseek(fin, 0x1597E7 + (i * 94) + 45, SEEK_SET);
+
+	  eaBase[enactionTotal] = ftell(fin);
+      temp = fgetc(fin);
+      temp += fgetc(fin) << 8;
+      temp += fgetc(fin) << 16;
+      temp += fgetc(fin) << 24;
+      enactionList[enactionTotal++] = temp;
+
+	  eaBase[enactionTotal] = ftell(fin);
+      temp = fgetc(fin);
+      temp += fgetc(fin) << 8;
+      temp += fgetc(fin) << 16;
+      temp += fgetc(fin) << 24;
+      enactionList[enactionTotal++] = temp;
+   }
+}
+
+//--------------------------------------------------------------------------
+
+void DumpMiscLine(FILE* fin, int address, int length)
+{
+	int  i;
+	int  temp;
+	int  temp2;
+	char tempStr[6000] = "";
+	char tempStr2[50] = "";
+	bool zerobefore = false;
+
+	printf("// MAX LENGTH: %d characters\n", length);
+
+    fseek(fin, address, SEEK_SET);
+	for (i = 0; i < length; i++)
+	{
+		temp = fgetc(fin);
+
+		if (temp == 0)
+		{
+			if (zerobefore == false)
+			{
+		       strcat(tempStr, "[00]");
+		       zerobefore = true;
+		    }
+		}
+		else if ((temp >= 0x50) && (temp <= 0xAA))
+		{
+			sprintf(tempStr2, "%c", temp - 0x30);
+			strcat(tempStr, tempStr2);
+		}
+		else
+		{
+			if (temp == 0x01 || temp == 0x08 || temp == 0x02)
+			{
+				temp2 = fgetc(fin);
+				sprintf(tempStr2, "[%02X %02X]", temp, temp2);
+				i++;
+			}
+			else
+				sprintf(tempStr2, "[%02X]", temp);
+
+			strcat(tempStr, tempStr2);
+		}
+
+	}
+
+	printf("DIRECTED 0x%06X %s\n\n", address, tempStr);
+}
+
+
+//--------------------------------------------------------------------------
+
+void DumpPhoneStuff(FILE* fin)
+{
+   int           i;
+   int           temp;
+
+   for (i = 0; i < 5; i++)
+   {
+      fseek(fin, 0x157CAE + (i * 31) + 27, SEEK_SET);
+
+	  temp = fgetc(fin);
+      temp += fgetc(fin) << 8;
+      temp += fgetc(fin) << 16;
+      temp += fgetc(fin) << 24;
+      phoneList[phoneTotal++] = temp;
+   }
+}
+
+//--------------------------------------------------------------------------
+
+void DumpFlyoverLine(FILE* fin, int address)
+{
+	// address is in hex mode, not SNES mode
+
+	int  temp;
+	int  temp2;
+	int  length = 0;
+	char tempStr[6000] = "";
+	char tempStr2[50] = "";
+	bool zerobefore = false;
+
+    fseek(fin, address, SEEK_SET);
+
+    temp = fgetc(fin);
+    length++;
+
+    while ((temp != 0) && (length < 200))
+	{
+		if ((temp >= 0x50) && (temp <= 0xAA))
+		{
+			sprintf(tempStr2, "%c", temp - 0x30);
+			strcat(tempStr, tempStr2);
+		}
+		else
+		{
+			if (temp == 0x01 || temp == 0x08 || temp == 0x02)
+			{
+				temp2 = fgetc(fin);
+				sprintf(tempStr2, "[%02X %02X]", temp, temp2);
+				length++;
+			}
+			else
+				sprintf(tempStr2, "[%02X]", temp);
+
+			strcat(tempStr, tempStr2);
+		}
+
+		temp = fgetc(fin);
+		length++;
+	}
+
+	strcat(tempStr, "[00]");
+	printf("%06X 0x%06X\n%s\n\n", HexToSNES(address), address, tempStr);
+}
+
+//--------------------------------------------------------------------------
+
+void DumpNamingText(FILE* fin, int address, int length)
+{
+	int  i;
+	int  temp;
+	int  temp2;
+	char tempStr[6000] = "";
+	char tempStr2[50] = "";
+	bool zerobefore = false;
+
+//	printf("// MAX LENGTH: %d characters\n", length);
+
+    fseek(fin, address, SEEK_SET);
+	for (i = 0; i < length; i++)
+	{
+		temp = fgetc(fin);
+
+		if ((temp >= 0x50) && (temp <= 0xAA))
+		{
+			sprintf(tempStr2, "%c", temp - 0x30);
+			strcat(tempStr, tempStr2);
+		}
+		else
+		{
+			if (temp == 0x05)
+			{
+				temp2 = fgetc(fin);
+				sprintf(tempStr2, "[%02X %02X]", temp, temp2);
+				i++;
+			}
+			else
+				sprintf(tempStr2, "[%02X]", temp);
+
+			strcat(tempStr, tempStr2);
+		}
+
+	}
+
+	printf("%06X 0x%06X\n%s\n\n", HexToSNES(address), address, tempStr);
+}
+
+//--------------------------------------------------------------------------
+
+int GetAddress(FILE* fin, int address)
+{
+	int tempAddr;
+
+	fseek(fin, address, SEEK_SET);
+	tempAddr = fgetc(fin);
+	tempAddr += fgetc(fin) << 8;
+	tempAddr += fgetc(fin) << 16;
+	tempAddr += fgetc(fin) << 24;
+
+	return tempAddr;
+}
